@@ -79,6 +79,25 @@ La aplicación genera un archivo Excel `FACTURA_FINAL.xlsx` con dos hojas:
 - Timestamps de eventos clave
 - Tipificación de conversaciones
 
+## 🚂 Despliegue en Railway
+
+Para desplegar la aplicación en Railway:
+
+1. **Conecta tu repositorio GitHub** en Railway
+2. **Railway detectará automáticamente** la configuración de Python
+3. **El Procfile** iniciará la aplicación automáticamente
+4. **Accede a tu app** en la URL proporcionada por Railway
+
+La aplicación está configurada para:
+- Usar el puerto dinámico de Railway (`$PORT`)
+- Ejecutarse en modo headless (sin interfaz local)
+- Aceptar conexiones externas
+
+**Archivos de configuración incluidos:**
+- `Procfile` - Comando de inicio
+- `runtime.txt` - Versión de Python
+- `setup.sh` - Configuración de Streamlit
+
 ## 🔍 Lógica de Negocio
 
 ### HSM (Conversaciones)
