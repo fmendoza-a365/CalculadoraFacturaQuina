@@ -7,33 +7,27 @@ from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-# Configuración de Página
-st.set_page_config(page_title="Facturación Quina", page_icon="💰", layout="wide")
+st.set_page_config(page_title="Facturación Quina", page_icon="�", layout="wide")
 
-# Título y Descripción
-st.title("🤖 Calculadora de Facturación Automática")
+st.title("Calculadora de Facturación - Quina")
 st.markdown("""
-Sube tus archivos mensuales (**RDC** y **DDC**) para generar la factura oficial.
-Esta app procesa las reglas de negocio, descuentos de agentes y ventanas de 24h.
+Sube los archivos RDC y DDC mensuales para generar la factura.
+Se aplicarán automáticamente las reglas de ventana 24h, descuentos por agente y crédito.
 """)
 
-# ═══════════════════════════════════════════════════════════════════════════
-# SIDEBAR: CARGA DE ARCHIVOS
-# ═══════════════════════════════════════════════════════════════════════════
-st.sidebar.header("📂 1. Carga de Archivos")
+# Carga de archivos
+st.sidebar.header("1. Archivos de Entrada")
 
 file_rdc = st.sidebar.file_uploader("Subir Archivo RDC (Resumen)", type=["xlsx"])
 files_ddc = st.sidebar.file_uploader("Subir Archivos DDC (Detalle)", type=["xlsx"], accept_multiple_files=True)
 
-# ═══════════════════════════════════════════════════════════════════════════
-# LÓGICA DE PROCESAMIENTO
-# ═══════════════════════════════════════════════════════════════════════════
+# Procesamiento de facturación
 
 def get_excel_bytes(q_hsm, q_mensajes, hsm_bruto, hsm_credito, mensajes_bruto, mensajes_agente, mensajes_credito, df_detalle):
-    """Genera el Excel de factura en memoria y devuelve bytes"""
+    """Genera archivo Excel con factura y hoja de auditoría"""
     output = io.BytesIO()
     
-    # Tarifas
+    # Configuración de tarifas
     FEE_MENSUAL = 760.00
     TARIFA_HSM = 0.077
     META_FREE_TIER = 1000
@@ -183,17 +177,17 @@ def get_excel_bytes(q_hsm, q_mensajes, hsm_bruto, hsm_credito, mensajes_bruto, m
     wb.save(output)
     return output.getvalue()
 
-# Botón Principal
-if st.sidebar.button("🚀 PROCESAR FACTURA", type="primary"):
+# Botón de procesamiento
+if st.sidebar.button("PROCESAR FACTURA", type="primary"):
     if not file_rdc or not files_ddc:
-        st.error("⚠️ Por favor sube AMBOS archivos (RDC y DDC) para continuar.")
+        st.error("Error: Debes subir ambos archivos (RDC y DDC) para continuar.")
     else:
         status_container = st.empty()
         progress_bar = st.progress(0)
         
         try:
-            # 1. RDC
-            status_container.info("⏳ Paso 1/3: Procesando Archivo RDC (Regla 24h)...")
+            # Paso 1: Procesamiento RDC
+            status_container.info("Paso 1/3: Procesando archivo RDC (regla 24h)...")
             progress_bar.progress(20)
             
             df_rdc = pd.read_excel(file_rdc, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
@@ -201,7 +195,7 @@ if st.sidebar.button("🚀 PROCESAR FACTURA", type="primary"):
             df_rdc["F.Inicio Chat"] = pd.to_datetime(df_rdc["F.Inicio Chat"])
             df_rdc.sort_values(by=["ID", "F.Inicio Chat"], inplace=True)
             
-            # Cálculo Vectorizado 24h
+            # Aplicar regla de ventana 24h
             df_rdc["Prev_ID"] = df_rdc["ID"].shift(1)
             df_rdc["Prev_Time"] = df_rdc["F.Inicio Chat"].shift(1)
             time_diff = (df_rdc["F.Inicio Chat"] - df_rdc["Prev_Time"]).dt.total_seconds() / 3600.0
@@ -223,8 +217,8 @@ if st.sidebar.button("🚀 PROCESAR FACTURA", type="primary"):
             # Marcar filas RDC que son de crédito (por Tipificación)
             df_rdc["Es_Credito"] = df_rdc["ID Chat"].isin(chats_con_credito_tipif)
 
-            # 2. DDC
-            status_container.info("⏳ Paso 2/3: Procesando DDC (Mensajes, Agentes, Crédito)...")
+            # Paso 2: Procesamiento DDC
+            status_container.info("Paso 2/3: Procesando DDC (mensajes, agentes, crédito)...")
             progress_bar.progress(50)
             
             dfs = []
@@ -238,13 +232,12 @@ if st.sidebar.button("🚀 PROCESAR FACTURA", type="primary"):
                 df_ddc["Tipo"] = df_ddc["Tipo"].astype(str).str.upper().str.strip()
                 df_ddc["Mensaje"] = df_ddc["Mensaje"].astype(str).str.lower()
                 
-                # Hitos
-                status_container.info("⏳ Paso 2/3: Analizando interacciones de Agente y Crédito...")
+                # Identificar hitos de agente y crédito
+                status_container.info("Paso 2/3: Analizando interacciones de agente y crédito...")
                 
                 agente_times = df_ddc[df_ddc["Tipo"] == "NOTIFICATION"].groupby("ID Chat")["Fecha Hora"].min()
                 
-                # Detectar trigger de crédito (Opción 3 del menú)
-                # Buscar variaciones del mensaje de crédito
+                # Detectar mensaje de evaluación de crédito (opción 3)
                 credito_mask = (
                     df_ddc["Mensaje"].str.contains("evalúa si tienes un crédito", na=False) |
                     df_ddc["Mensaje"].str.contains("evalua si tienes un credito", na=False) |
@@ -374,9 +367,9 @@ if st.sidebar.button("🚀 PROCESAR FACTURA", type="primary"):
                 df_detalle["Time_Agente"] = pd.NaT
                 df_detalle["Time_Credito"] = pd.NaT
 
-            # 3. RESULTADOS
+            # Resultados finales
             progress_bar.progress(100)
-            status_container.success("✅ ¡Cálculo Completado!")
+            status_container.success("Cálculo completado exitosamente")
             
             # Tarjetas de KPI
             col1, col2, col3 = st.columns(3)
@@ -387,21 +380,21 @@ if st.sidebar.button("🚀 PROCESAR FACTURA", type="primary"):
             with col3:
                 st.metric(label="Q Mensajes (Facturables)", value=f"{total_q_mensajes:,.0f}")
             
-            # Descarga
+            # Descarga de reporte
             st.markdown("---")
-            st.subheader("📥 Descargar Reporte")
+            st.subheader("Descargar Reporte")
             
             excel_data = get_excel_bytes(total_q_hsm, total_q_mensajes, hsm_bruto, hsm_credito, mensajes_bruto, mensajes_agente, mensajes_credito, df_detalle)
             
             st.download_button(
-                label="📄 Descargar FACTURA_FINAL.xlsx",
+                label="Descargar FACTURA_FINAL.xlsx",
                 data=excel_data,
                 file_name="FACTURA_FINAL.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
             
         except Exception as e:
-            status_container.error(f"❌ Error: {str(e)}")
+            status_container.error(f"Error en el procesamiento: {str(e)}")
 
 # Información Footer
 st.sidebar.markdown("---")
