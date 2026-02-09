@@ -7,16 +7,16 @@ from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-st.set_page_config(page_title="Facturación Quina", page_icon="�", layout="wide")
+st.set_page_config(page_title="Facturación Quina", page_icon="💼", layout="wide")
 
-st.title("Calculadora de Facturación - Quina")
+st.title("📋 Calculadora de Facturación - Quina")
 st.markdown("""
-Sube los archivos RDC y DDC mensuales para generar la factura.
+**📁 Instrucciones:** Sube los archivos RDC y DDC mensuales para generar la factura.  
 Se aplicarán automáticamente las reglas de ventana 24h, descuentos por agente y crédito.
 """)
 
 # Carga de archivos
-st.sidebar.header("1. Archivos de Entrada")
+st.sidebar.header("📂 Archivos de Entrada")
 
 file_rdc = st.sidebar.file_uploader("Subir Archivo RDC (Resumen)", type=["xlsx"])
 files_ddc = st.sidebar.file_uploader("Subir Archivos DDC (Detalle)", type=["xlsx"], accept_multiple_files=True)
@@ -178,16 +178,16 @@ def get_excel_bytes(q_hsm, q_mensajes, hsm_bruto, hsm_credito, mensajes_bruto, m
     return output.getvalue()
 
 # Botón de procesamiento
-if st.sidebar.button("PROCESAR FACTURA", type="primary"):
+if st.sidebar.button("⚙️ PROCESAR FACTURA", type="primary"):
     if not file_rdc or not files_ddc:
-        st.error("Error: Debes subir ambos archivos (RDC y DDC) para continuar.")
+        st.error("⚠️ Error: Debes subir ambos archivos (RDC y DDC) para continuar.")
     else:
         status_container = st.empty()
         progress_bar = st.progress(0)
         
         try:
             # Paso 1: Procesamiento RDC
-            status_container.info("Paso 1/3: Procesando archivo RDC (regla 24h)...")
+            status_container.info("⏳ Paso 1/3: Procesando archivo RDC (regla 24h)...")
             progress_bar.progress(20)
             
             df_rdc = pd.read_excel(file_rdc, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
@@ -218,7 +218,7 @@ if st.sidebar.button("PROCESAR FACTURA", type="primary"):
             df_rdc["Es_Credito"] = df_rdc["ID Chat"].isin(chats_con_credito_tipif)
 
             # Paso 2: Procesamiento DDC
-            status_container.info("Paso 2/3: Procesando DDC (mensajes, agentes, crédito)...")
+            status_container.info("⏳ Paso 2/3: Procesando DDC (mensajes, agentes, crédito)...")
             progress_bar.progress(50)
             
             dfs = []
@@ -233,7 +233,7 @@ if st.sidebar.button("PROCESAR FACTURA", type="primary"):
                 df_ddc["Mensaje"] = df_ddc["Mensaje"].astype(str).str.lower()
                 
                 # Identificar hitos de agente y crédito
-                status_container.info("Paso 2/3: Analizando interacciones de agente y crédito...")
+                status_container.info("🔍 Paso 2/3: Analizando interacciones de agente y crédito...")
                 
                 agente_times = df_ddc[df_ddc["Tipo"] == "NOTIFICATION"].groupby("ID Chat")["Fecha Hora"].min()
                 
@@ -369,7 +369,7 @@ if st.sidebar.button("PROCESAR FACTURA", type="primary"):
 
             # Resultados finales
             progress_bar.progress(100)
-            status_container.success("Cálculo completado exitosamente")
+            status_container.success("✅ Cálculo completado exitosamente")
             
             # Tarjetas de KPI
             col1, col2, col3 = st.columns(3)
@@ -382,19 +382,19 @@ if st.sidebar.button("PROCESAR FACTURA", type="primary"):
             
             # Descarga de reporte
             st.markdown("---")
-            st.subheader("Descargar Reporte")
+            st.subheader("📥 Descargar Reporte")
             
             excel_data = get_excel_bytes(total_q_hsm, total_q_mensajes, hsm_bruto, hsm_credito, mensajes_bruto, mensajes_agente, mensajes_credito, df_detalle)
             
             st.download_button(
-                label="Descargar FACTURA_FINAL.xlsx",
+                label="📄 Descargar FACTURA_FINAL.xlsx",
                 data=excel_data,
                 file_name="FACTURA_FINAL.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
             
         except Exception as e:
-            status_container.error(f"Error en el procesamiento: {str(e)}")
+            status_container.error(f"❌ Error en el procesamiento: {str(e)}")
 
 # Información Footer
 st.sidebar.markdown("---")
