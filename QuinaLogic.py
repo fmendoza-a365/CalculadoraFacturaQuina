@@ -46,6 +46,10 @@ class QuinaCalculator:
         # Carga de Datos
         if isinstance(source, pd.DataFrame):
             df = source.copy()
+        elif isinstance(source, str) and source.lower().endswith('.csv'):
+            df = pd.read_csv(source, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
+        elif hasattr(source, 'name') and source.name.lower().endswith('.csv'):
+            df = pd.read_csv(source, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
         else:
             df = pd.read_excel(source, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
 
@@ -85,6 +89,10 @@ class QuinaCalculator:
             for source in sources:
                 if isinstance(source, pd.DataFrame):
                     dfs.append(source)
+                elif isinstance(source, str) and source.lower().endswith('.csv'):
+                    dfs.append(pd.read_csv(source, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
+                elif hasattr(source, 'name') and source.name.lower().endswith('.csv'):
+                    dfs.append(pd.read_csv(source, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
                 else:
                     dfs.append(pd.read_excel(source, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
         elif isinstance(sources, pd.DataFrame): # Manejar DataFrame único

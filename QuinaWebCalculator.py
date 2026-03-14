@@ -19,8 +19,8 @@ Se aplicarán automáticamente las reglas de ventana 24h, descuentos por agente 
 # Carga de archivos
 st.sidebar.header("📂 Archivos de Entrada")
 
-file_rdc = st.sidebar.file_uploader("Subir Archivo RDC (Resumen)", type=["xlsx"])
-files_ddc = st.sidebar.file_uploader("Subir Archivos DDC (Detalle)", type=["xlsx"], accept_multiple_files=True)
+file_rdc = st.sidebar.file_uploader("Subir Archivo RDC (Resumen)", type=["xlsx", "csv"])
+files_ddc = st.sidebar.file_uploader("Subir Archivos DDC (Detalle)", type=["xlsx", "csv"], accept_multiple_files=True)
 
 # Procesamiento de facturación
 
@@ -191,7 +191,10 @@ if st.sidebar.button("⚙️ PROCESAR FACTURA", type="primary"):
             status_container.info("⏳ Paso 1/3: Procesando archivo RDC (regla 24h)...")
             progress_bar.progress(20)
             
-            df_rdc = pd.read_excel(file_rdc, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
+            if file_rdc.name.lower().endswith('.csv'):
+                df_rdc = pd.read_csv(file_rdc, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
+            else:
+                df_rdc = pd.read_excel(file_rdc, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
             df_rdc.dropna(subset=["ID", "F.Inicio Chat"], inplace=True)
             df_rdc["F.Inicio Chat"] = pd.to_datetime(df_rdc["F.Inicio Chat"])
             df_rdc.sort_values(by=["ID", "F.Inicio Chat"], inplace=True)
@@ -224,7 +227,10 @@ if st.sidebar.button("⚙️ PROCESAR FACTURA", type="primary"):
             
             dfs = []
             for f in files_ddc:
-                dfs.append(pd.read_excel(f, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
+                if f.name.lower().endswith('.csv'):
+                    dfs.append(pd.read_csv(f, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
+                else:
+                    dfs.append(pd.read_excel(f, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
             
             if dfs:
                 df_ddc = pd.concat(dfs, ignore_index=True)
