@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import io
 import time
+import re
 from datetime import datetime
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -223,7 +224,7 @@ if st.sidebar.button("⚙️ PROCESAR FACTURA", type="primary"):
             
             dfs = []
             for f in files_ddc:
-                dfs.append(pd.read_excel(f, usecols=["ID Chat", "Mensaje", "Fecha Hora", "Tipo"]))
+                dfs.append(pd.read_excel(f, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
             
             if dfs:
                 df_ddc = pd.concat(dfs, ignore_index=True)
@@ -235,16 +236,22 @@ if st.sidebar.button("⚙️ PROCESAR FACTURA", type="primary"):
                 # Identificar hitos de agente y crédito
                 status_container.info("🔍 Paso 2/3: Analizando interacciones de agente y crédito...")
                 
-                agente_times = df_ddc[df_ddc["Tipo"] == "NOTIFICATION"].groupby("ID Chat")["Fecha Hora"].min()
+                if "Remitente" in df_ddc.columns:
+                    agente_mask = df_ddc["Remitente"].astype(str).str.contains("Agente", case=False, na=False) | (df_ddc["Tipo"] == "NOTIFICATION")
+                else:
+                    agente_mask = df_ddc["Tipo"] == "NOTIFICATION"
+                agente_times = df_ddc[agente_mask].groupby("ID Chat")["Fecha Hora"].min()
                 
                 # Detectar mensaje de evaluación de crédito (opción 3)
-                credito_mask = (
-                    df_ddc["Mensaje"].str.contains("evalúa si tienes un crédito", na=False) |
-                    df_ddc["Mensaje"].str.contains("evalua si tienes un credito", na=False) |
-                    df_ddc["Mensaje"].str.contains("3. evalúa", na=False) |
-                    df_ddc["Mensaje"].str.contains("3. evalua", na=False)
+                PATRON_OPC3 = re.compile(
+                    r"(?:Hola.*desde aqu[ií].*podr[áa]s evaluar si tienes un cr[ée]dito"
+                    r"|podr[áa]s evaluar si tienes un cr[ée]dito)",
+                    re.IGNORECASE,
                 )
-                credito_times = df_ddc[credito_mask].groupby("ID Chat")["Fecha Hora"].min()
+                df_ddc["_es_inicio_opc3"] = df_ddc["Mensaje"].apply(
+                    lambda m: bool(PATRON_OPC3.search(str(m))) if pd.notna(m) else False
+                )
+                credito_times = df_ddc[df_ddc["_es_inicio_opc3"]].groupby("ID Chat")["Fecha Hora"].min()
                 
                 df_ddc["Time_Agente"] = df_ddc["ID Chat"].map(agente_times)
                 df_ddc["Time_Credito"] = df_ddc["ID Chat"].map(credito_times)

@@ -1,6 +1,7 @@
 import pandas as pd
 import io
 import openpyxl
+import re
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 class QuinaCalculator:
@@ -85,7 +86,7 @@ class QuinaCalculator:
                 if isinstance(source, pd.DataFrame):
                     dfs.append(source)
                 else:
-                    dfs.append(pd.read_excel(source, usecols=["ID Chat", "Mensaje", "Fecha Hora", "Tipo"]))
+                    dfs.append(pd.read_excel(source, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
         elif isinstance(sources, pd.DataFrame): # Manejar DataFrame único
              dfs.append(sources)
         
@@ -102,15 +103,21 @@ class QuinaCalculator:
         df_ddc["Mensaje"] = df_ddc["Mensaje"].astype(str).str.lower()
 
         # Identificar Marcas de Tiempo de Agente y Crédito
-        agente_times = df_ddc[df_ddc["Tipo"] == "NOTIFICATION"].groupby("ID Chat")["Fecha Hora"].min()
+        if "Remitente" in df_ddc.columns:
+            agente_mask = df_ddc["Remitente"].astype(str).str.contains("Agente", case=False, na=False) | (df_ddc["Tipo"] == "NOTIFICATION")
+        else:
+            agente_mask = df_ddc["Tipo"] == "NOTIFICATION"
+        agente_times = df_ddc[agente_mask].groupby("ID Chat")["Fecha Hora"].min()
 
-        credito_mask = (
-            df_ddc["Mensaje"].str.contains("evalúa si tienes un crédito", na=False) |
-            df_ddc["Mensaje"].str.contains("evalua si tienes un credito", na=False) |
-            df_ddc["Mensaje"].str.contains("3. evalúa", na=False) |
-            df_ddc["Mensaje"].str.contains("3. evalua", na=False)
+        PATRON_OPC3 = re.compile(
+            r"(?:Hola.*desde aqu[ií].*podr[áa]s evaluar si tienes un cr[ée]dito"
+            r"|podr[áa]s evaluar si tienes un cr[ée]dito)",
+            re.IGNORECASE,
         )
-        credito_times = df_ddc[credito_mask].groupby("ID Chat")["Fecha Hora"].min()
+        df_ddc["_es_inicio_opc3"] = df_ddc["Mensaje"].apply(
+            lambda m: bool(PATRON_OPC3.search(str(m))) if pd.notna(m) else False
+        )
+        credito_times = df_ddc[df_ddc["_es_inicio_opc3"]].groupby("ID Chat")["Fecha Hora"].min()
 
         df_ddc["Time_Agente"] = df_ddc["ID Chat"].map(agente_times)
         df_ddc["Time_Credito"] = df_ddc["ID Chat"].map(credito_times)
