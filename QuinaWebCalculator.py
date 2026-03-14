@@ -192,7 +192,7 @@ if st.sidebar.button("⚙️ PROCESAR FACTURA", type="primary"):
             progress_bar.progress(20)
             
             if file_rdc.name.lower().endswith('.csv'):
-                df_rdc = pd.read_csv(file_rdc, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
+                df_rdc = pd.read_csv(file_rdc, sep=None, engine='python', encoding='utf-8-sig', usecols=lambda c: c.strip() in ["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
             else:
                 df_rdc = pd.read_excel(file_rdc, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
             df_rdc.dropna(subset=["ID", "F.Inicio Chat"], inplace=True)
@@ -228,7 +228,7 @@ if st.sidebar.button("⚙️ PROCESAR FACTURA", type="primary"):
             dfs = []
             for f in files_ddc:
                 if f.name.lower().endswith('.csv'):
-                    dfs.append(pd.read_csv(f, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
+                    dfs.append(pd.read_csv(f, sep=None, engine='python', encoding='utf-8-sig', usecols=lambda c: c.strip() in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
                 else:
                     dfs.append(pd.read_excel(f, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
             

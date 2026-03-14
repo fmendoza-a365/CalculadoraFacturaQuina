@@ -47,9 +47,9 @@ class QuinaCalculator:
         if isinstance(source, pd.DataFrame):
             df = source.copy()
         elif isinstance(source, str) and source.lower().endswith('.csv'):
-            df = pd.read_csv(source, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
+            df = pd.read_csv(source, sep=None, engine='python', encoding='utf-8-sig', usecols=lambda c: c.strip() in ["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
         elif hasattr(source, 'name') and source.name.lower().endswith('.csv'):
-            df = pd.read_csv(source, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
+            df = pd.read_csv(source, sep=None, engine='python', encoding='utf-8-sig', usecols=lambda c: c.strip() in ["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
         else:
             df = pd.read_excel(source, usecols=["ID", "F.Inicio Chat", "ID Chat", "Tipificación Chat"])
 
@@ -90,9 +90,9 @@ class QuinaCalculator:
                 if isinstance(source, pd.DataFrame):
                     dfs.append(source)
                 elif isinstance(source, str) and source.lower().endswith('.csv'):
-                    dfs.append(pd.read_csv(source, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
+                    dfs.append(pd.read_csv(source, sep=None, engine='python', encoding='utf-8-sig', usecols=lambda c: c.strip() in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
                 elif hasattr(source, 'name') and source.name.lower().endswith('.csv'):
-                    dfs.append(pd.read_csv(source, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
+                    dfs.append(pd.read_csv(source, sep=None, engine='python', encoding='utf-8-sig', usecols=lambda c: c.strip() in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
                 else:
                     dfs.append(pd.read_excel(source, usecols=lambda c: c in ["ID Chat", "Mensaje", "Fecha Hora", "Tipo", "Remitente"]))
         elif isinstance(sources, pd.DataFrame): # Manejar DataFrame único
