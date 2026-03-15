@@ -142,13 +142,30 @@ class QuinaCalculator:
         cond_post_credito_raw = df_ddc["_cum_credito"] > 0
         cond_antes_credito = ~cond_post_credito_raw
 
+        # 1. Mensajes previos al flujo de crédito para determinar "Doble Mesa"
+        # Contamos mensajes comerciales (antes de crédito) por cada chat
+        # REGLA: Juan suele contar los mensajes que el USUARIO envió o la interacción total. 
+        # En los scripts antiguos contaba filas de DDC (que incluye bot y usuario).
+        # Vamos a filtrar para asegurarnos que contamos correctamente.
+        comercial_counts = df_ddc[cond_antes_credito].groupby("ID Chat").size().reset_index(name="Msjs_Comerciales")
+        es_doble_mesa_map = (comercial_counts.set_index("ID Chat")["Msjs_Comerciales"] > 7).to_dict()
+        
+        # Guardar en el DataFrame si es doble mesa
+        df_ddc["_es_doble_mesa"] = df_ddc["ID Chat"].map(es_doble_mesa_map).fillna(False)
+
         # Tiempos de referencia para reportería
         agente_times = df_ddc[cond_post_agente].groupby("ID Chat")["Fecha Hora"].min()
         credito_times = df_ddc[cond_post_credito_raw].groupby("ID Chat")["Fecha Hora"].min()
         df_ddc["Time_Agente"] = df_ddc["ID Chat"].map(agente_times)
         df_ddc["Time_Credito"] = df_ddc["ID Chat"].map(credito_times)
 
-        df_ddc["Es_Facturable"] = (cond_antes_agente & cond_antes_credito).astype(int)
+        # Lógica de Facturabilidad ACTUALIZADA con Regla de los 7 Mensajes:
+        # Es facturable si:
+        # a) Ocurre ANTES de un agente humano (cond_antes_agente)
+        # Y ADEMÁS:
+        # b) Ocurre ANTES de empezar el flujo de crédito (cond_antes_credito)
+        # c) O si es una conversación de "Doble Mesa" (>7 msjs previos), se factura TODO (antes de agente)
+        df_ddc["Es_Facturable"] = (cond_antes_agente & (cond_antes_credito | df_ddc["_es_doble_mesa"])).astype(int)
         
         self.df_ddc = df_ddc
 
@@ -159,14 +176,15 @@ class QuinaCalculator:
         cond_post_agente = ~cond_antes_agente
         self.mensajes_agente = cond_post_agente.sum()
 
-        cond_post_credito = cond_antes_agente & (~cond_antes_credito)
-        self.mensajes_credito = cond_post_credito.sum()
+        # Mensajes de crédito que NO se cobran (solo si NO es doble mesa)
+        cond_post_credito_no_cobrado = cond_antes_agente & (~cond_antes_credito) & (~df_ddc["_es_doble_mesa"])
+        self.mensajes_credito = cond_post_credito_no_cobrado.sum()
 
         # Cálculo Final de HSM
         # Igual que el original: hsm_bruto - hsm_credito - 1000
         self.total_q_hsm = max(0, self.hsm_bruto - self.hsm_credito - self.META_FREE_TIER)
 
-        self._prepare_detailed_report(cond_antes_agente, cond_antes_credito)
+        self._prepare_detailed_report(cond_antes_agente, cond_antes_credito, es_doble_mesa_map)
 
     def _prepare_simple_detail(self):
         """Usado cuando no se proporcionan archivos DDC"""
@@ -174,13 +192,13 @@ class QuinaCalculator:
         df["Fecha_Dia"] = df["F.Inicio Chat"].dt.date
         df["Es_Credito"] = self.df_rdc["Es_Credito"].astype(int)
         # Completar columnas faltantes con 0 o NaT
-        for col in ["Mensajes_Bruto", "Mensajes_Post_Agente", "Mensajes_Post_Credito", "Mensajes_Facturables"]:
+        for col in ["Mensajes_Bruto", "Mensajes_Post_Agente", "Mensajes_Post_Credito", "Mensajes_Facturables", "Es_Doble_Mesa"]:
             df[col] = 0
         df["Time_Agente"] = pd.NaT
         df["Time_Credito"] = pd.NaT
         self.df_detalle = df
 
-    def _prepare_detailed_report(self, cond_antes_agente, cond_antes_credito):
+    def _prepare_detailed_report(self, cond_antes_agente, cond_antes_credito, es_doble_mesa_map):
         # 1. Totales Facturables: Conteo de mensajes que cumplen todas las condiciones de cobro
         ddc_counts = self.df_ddc.groupby("ID Chat")["Es_Facturable"].sum().reset_index()
         ddc_counts.rename(columns={"Es_Facturable": "Mensajes_Facturables"}, inplace=True)
@@ -193,10 +211,10 @@ class QuinaCalculator:
         ddc_post_agente = self.df_ddc.groupby("ID Chat")["Es_Post_Agente"].sum().reset_index()
         ddc_post_agente.rename(columns={"Es_Post_Agente": "Mensajes_Post_Agente"}, inplace=True)
         
-        # 4. Mensajes Post-Crédito: Mensajes descartados por ocurrir después de la notificación de crédito
-        self.df_ddc["Es_Post_Credito"] = (cond_antes_agente & (~cond_antes_credito)).astype(int)
-        ddc_post_credito = self.df_ddc.groupby("ID Chat")["Es_Post_Credito"].sum().reset_index()
-        ddc_post_credito.rename(columns={"Es_Post_Credito": "Mensajes_Post_Credito"}, inplace=True)
+        # 4. Mensajes Post-Crédito (Descontados): Solo se descuentan si NO es doble mesa
+        self.df_ddc["Es_Post_Credito_Desc"] = (cond_antes_agente & (~cond_antes_credito) & (~self.df_ddc["_es_doble_mesa"])).astype(int)
+        ddc_post_credito = self.df_ddc.groupby("ID Chat")["Es_Post_Credito_Desc"].sum().reset_index()
+        ddc_post_credito.rename(columns={"Es_Post_Credito_Desc": "Mensajes_Post_Credito"}, inplace=True)
         
         # 5. Metadatos Temporales: Marcas de tiempo de primera derivación a agente o crédito
         ddc_meta = self.df_ddc[["ID Chat", "Time_Agente", "Time_Credito"]].groupby("ID Chat").first().reset_index()
@@ -206,6 +224,7 @@ class QuinaCalculator:
         ddc_view = pd.merge(ddc_view, ddc_post_agente, on="ID Chat", how="left")
         ddc_view = pd.merge(ddc_view, ddc_post_credito, on="ID Chat", how="left")
         ddc_view = pd.merge(ddc_view, ddc_meta, on="ID Chat", how="left")
+        ddc_view["Es_Doble_Mesa"] = ddc_view["ID Chat"].map(es_doble_mesa_map).fillna(False).astype(int)
         ddc_view["ID Chat"] = ddc_view["ID Chat"].astype(str)
         
         # Preparación de Vista RDC: Seleccionar columnas relevantes del Resumen Diario
@@ -216,7 +235,7 @@ class QuinaCalculator:
         df_detalle = pd.merge(rdc_view, ddc_view, on="ID Chat", how="left")
         
         # Limpieza de Datos: Rellenar valores nulos resultantes del merge con ceros (para enteros)
-        cols_to_fill = ["Mensajes_Facturables", "Mensajes_Bruto", "Mensajes_Post_Agente", "Mensajes_Post_Credito"]
+        cols_to_fill = ["Mensajes_Facturables", "Mensajes_Bruto", "Mensajes_Post_Agente", "Mensajes_Post_Credito", "Es_Doble_Mesa"]
         df_detalle[cols_to_fill] = df_detalle[cols_to_fill].fillna(0).astype(int)
         
         df_detalle["Es_Credito"] = df_detalle["Es_Credito"].astype(int)
@@ -225,7 +244,7 @@ class QuinaCalculator:
         # Selección de Columnas Finales: Filtrar y ordenar las columnas para el reporte de auditoría
         self.df_detalle = df_detalle[[
             "ID Chat", "Fecha_Dia", "F.Inicio Chat", "Tipificación Chat",
-            "Es_Cobrable", "Es_Credito", "Mensajes_Bruto",
+            "Es_Cobrable", "Es_Credito", "Es_Doble_Mesa", "Mensajes_Bruto",
             "Mensajes_Post_Agente", "Mensajes_Post_Credito", "Mensajes_Facturables",
             "Time_Agente", "Time_Credito"
         ]]
