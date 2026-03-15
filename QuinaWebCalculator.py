@@ -242,11 +242,21 @@ if st.sidebar.button("⚙️ PROCESAR FACTURA", type="primary"):
                 # Identificar hitos de agente y crédito
                 status_container.info("🔍 Paso 2/3: Analizando interacciones de agente y crédito...")
                 
+                df_ddc.sort_values(by=["ID Chat", "Fecha Hora"], inplace=True, ignore_index=True)
+                
                 if "Remitente" in df_ddc.columns:
-                    agente_mask = df_ddc["Remitente"].astype(str).str.contains("Agente", case=False, na=False) | (df_ddc["Tipo"] == "NOTIFICATION")
+                    # Requisito del usuario: Filtrar estrictamente "Agente 1 Banco de la Nación", "Agente 2 Banco de la Nación", etc.
+                    PATRON_AGENTE = re.compile(r"Agente\s+\d+\s+Banco\s+de\s+la\s+Naci[oó]n", re.IGNORECASE)
+                    mask_remitente_agente = df_ddc["Remitente"].astype(str).apply(lambda r: bool(PATRON_AGENTE.search(r)))
+                    agente_mask = mask_remitente_agente
                 else:
-                    agente_mask = df_ddc["Tipo"] == "NOTIFICATION"
-                agente_times = df_ddc[agente_mask].groupby("ID Chat")["Fecha Hora"].min()
+                    agente_mask = pd.Series(False, index=df_ddc.index)
+                
+                
+                df_ddc["_es_agente"] = agente_mask.astype(int)
+                df_ddc["_cum_agente"] = df_ddc.groupby("ID Chat")["_es_agente"].cumsum()
+                cond_post_agente = df_ddc["_cum_agente"] > 0
+                cond_antes_agente = ~cond_post_agente
                 
                 # Detectar mensaje de evaluación de crédito (opción 3)
                 PATRON_OPC3 = re.compile(
@@ -256,14 +266,15 @@ if st.sidebar.button("⚙️ PROCESAR FACTURA", type="primary"):
                 )
                 df_ddc["_es_inicio_opc3"] = df_ddc["Mensaje"].apply(
                     lambda m: bool(PATRON_OPC3.search(str(m))) if pd.notna(m) else False
-                )
-                credito_times = df_ddc[df_ddc["_es_inicio_opc3"]].groupby("ID Chat")["Fecha Hora"].min()
+                ).astype(int)
+                df_ddc["_cum_credito"] = df_ddc.groupby("ID Chat")["_es_inicio_opc3"].cumsum()
+                cond_post_credito_raw = df_ddc["_cum_credito"] > 0
+                cond_antes_credito = ~cond_post_credito_raw
                 
+                agente_times = df_ddc[cond_post_agente].groupby("ID Chat")["Fecha Hora"].min()
+                credito_times = df_ddc[cond_post_credito_raw].groupby("ID Chat")["Fecha Hora"].min()
                 df_ddc["Time_Agente"] = df_ddc["ID Chat"].map(agente_times)
                 df_ddc["Time_Credito"] = df_ddc["ID Chat"].map(credito_times)
-                
-                cond_antes_agente = df_ddc["Time_Agente"].isna() | (df_ddc["Fecha Hora"] < df_ddc["Time_Agente"])
-                cond_antes_credito = df_ddc["Time_Credito"].isna() | (df_ddc["Fecha Hora"] < df_ddc["Time_Credito"])
                 
                 df_ddc["Es_Facturable"] = (cond_antes_agente & cond_antes_credito).astype(int)
                 total_q_mensajes = df_ddc["Es_Facturable"].sum()
